@@ -1,0 +1,10 @@
+[onec]
+# address of the infobase publication, OData lives at <base_url>/odata/standard.odata
+base_url = "http://server/infobase"
+timeout = 30
+# upper bound for limit in one request
+row_limit = 500
+# seconds to reuse identical answers
+cache_ttl = 60
+# http services under <base_url>/hs/ that onec_run_report may call, GET only
+allowed_services = []
