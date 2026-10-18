@@ -50,4 +50,7 @@ class Endpoint:
         return url, params or {}
 
 
+allowed_services = _cfg.get("http_service", {}).get("allowed_services", [])
+
+
 endpoint = Endpoint()

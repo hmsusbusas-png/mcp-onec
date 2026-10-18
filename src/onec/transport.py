@@ -2,6 +2,7 @@ import hashlib
 import json
 import time
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -16,13 +17,19 @@ def _key(url, params):
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
-def get(path, params=None, cache=True):
+def enc_entity(name):
+    # 1C entity names are often russian: Catalog_Контрагенты
+    return quote(name, safe="")
+
+
+def get(path, params=None, cache=True, entity_encoded=False):
     if path == "$metadata":
         url = f"{endpoint.base}/odata/standard.odata/$metadata"
         r = _gate.get(url)
         r.raise_for_status()
         return r.text
-    url, params = endpoint.odata_url(path, params)
+    part = enc_entity(path) if entity_encoded else path
+    url, params = endpoint.odata_url(part, params)
     if cache:
         hit = _store.get(_key(url, params))
         if hit and time.time() - hit[0] < endpoint.cache_ttl:
@@ -35,9 +42,13 @@ def get(path, params=None, cache=True):
     return body
 
 
-def post_service(name, payload):
-    url, _ = endpoint.service_url(name)
-    r = _gate.post(url, json=payload)
+def get_service(name, params=None):
+    # read-only by design: white listed services, GET only
+    allowed = endpoint.allowed_services
+    if name not in allowed:
+        raise PermissionError(f"service {name!r} not in allowed_services in config.toml")
+    url, qs = endpoint.service_url(name, params)
+    r = _gate.get(url, params=qs)
     r.raise_for_status()
     return r.json()
 
