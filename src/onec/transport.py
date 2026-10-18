@@ -60,6 +60,17 @@ def literal(text):
     return "'" + text.replace("'", "''") + "'"
 
 
+def checked(reply, url):
+    if reply.status_code == 401:
+        raise PermissionError("1C rejected the login, check ONEC_USER and ONEC_PASSWORD")
+    if reply.status_code == 404:
+        raise LookupError(f"1C returned 404 for {url.removeprefix(odata_root)}, object is not published or misspelled")
+    if reply.status_code >= 400:
+        detail = " ".join(reply.text[:300].split())
+        raise RuntimeError(f"1C returned {reply.status_code}: {detail}")
+    return reply
+
+
 def fetch(url, query=None, use_cache=True):
     query = dict(query or {})
     query.setdefault("$format", "json")
@@ -67,22 +78,21 @@ def fetch(url, query=None, use_cache=True):
     hit = recent.get(key)
     if use_cache and hit and time.monotonic() - hit[0] < settings.cache_ttl:
         return hit[1]
-    reply = gate().get(key)
-    if reply.status_code == 401:
-        raise PermissionError("1C rejected the login, check ONEC_USER and ONEC_PASSWORD")
-    if reply.status_code == 404:
-        raise LookupError(f"1C returned 404 for {url.removeprefix(odata_root)}, object is not published or misspelled")
-    reply.raise_for_status()
-    body = reply.json()
+    body = checked(gate().get(key), url).json()
     if use_cache:
         recent[key] = (time.monotonic(), body)
     return body
 
 
 def metadata():
-    reply = gate().get(f"{odata_root}/$metadata")
-    reply.raise_for_status()
-    return reply.text
+    url = f"{odata_root}/$metadata"
+    return checked(gate().get(url), url).text
+
+
+def count(path, query):
+    url = f"{odata_root}/{path}/$count"
+    tail = "?" + encode_query(query) if query else ""
+    return int(checked(gate().get(url + tail), url).text.lstrip("﻿").strip())
 
 
 def rows(path, query, offset, limit):
@@ -110,8 +120,8 @@ def service(name, params):
         raise PermissionError(f"service {name!r} is not in allowed_services in config.toml")
     path = "/".join(quote(part, safe="") for part in name.split("/"))
     tail = "?" + encode_query(params) if params else ""
-    reply = gate().get(f"{settings.base_url}/hs/{path}{tail}")
-    reply.raise_for_status()
+    url = f"{settings.base_url}/hs/{path}"
+    reply = checked(gate().get(url + tail), url)
     try:
         return reply.json()
     except ValueError:
