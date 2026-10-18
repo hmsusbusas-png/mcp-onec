@@ -3,54 +3,25 @@ import tomllib
 from pathlib import Path
 
 from dotenv import load_dotenv
-from httpx import Auth
 
+repo_root = Path(__file__).resolve().parents[3]
+load_dotenv(repo_root / ".env")
 load_dotenv()
 
-_cfg = {}
-_cfg_path = os.environ.get("ONEC_CONFIG", "config.toml")
-if Path(_cfg_path).exists():
-    _cfg = tomllib.loads(Path(_cfg_path).read_text("utf-8"))
+conf_path = Path(os.environ.get("ONEC_CONFIG", repo_root / "config.toml"))
+conf = tomllib.loads(conf_path.read_text("utf-8")) if conf_path.exists() else {}
+onec_conf = conf.get("onec", conf)
+
+base_url = onec_conf.get("base_url", "http://localhost/base").rstrip("/")
+timeout = onec_conf.get("timeout", 30)
+row_limit = onec_conf.get("row_limit", 500)
+cache_ttl = onec_conf.get("cache_ttl", 60)
+allowed_services = list(onec_conf.get("allowed_services", onec_conf.get("http_service", {}).get("allowed_services", [])))
 
 
-class BasicAuth(Auth):
-    def __init__(self):
-        self.user = os.environ.get("ONEC_USER", "")
-        self.pwd = os.environ.get("ONEC_PASSWORD", "")
-        if not self.user or not self.pwd:
-            raise RuntimeError("ONEC_USER and ONEC_PASSWORD must be set in env")
-
-    def auth_flow(self, request):
-        import base64
-        token = base64.b64encode(f"{self.user}:{self.pwd}".encode()).decode()
-        request.headers["Authorization"] = f"Basic {token}"
-        yield request
-
-
-class Endpoint:
-    def __init__(self):
-        self.mode = _cfg.get("mode", "odata")
-        self.base = _cfg.get("base_url", "http://localhost").rstrip("/")
-        self.timeout = _cfg.get("timeout", 30)
-        self.row_limit = _cfg.get("row_limit", 500)
-        self.cache_ttl = _cfg.get("cache_ttl", 60)
-        self.reports = _cfg.get("http_service", {}).get("reports_root", "")
-        self.auth = BasicAuth()
-
-    def odata_url(self, path, params=None):
-        url = f"{self.base}/odata/standard.odata/{path}"
-        if params is None:
-            params = {}
-        params.setdefault("$format", "json")
-        return url, params
-
-    def service_url(self, name, params=None):
-        # 1C http services are published per config; adapter expects full path
-        url = f"{self.base}/hs/{name}"
-        return url, params or {}
-
-
-allowed_services = _cfg.get("http_service", {}).get("allowed_services", [])
-
-
-endpoint = Endpoint()
+def credentials():
+    login = os.environ.get("ONEC_USER", "")
+    secret = os.environ.get("ONEC_PASSWORD", "")
+    if not login or not secret:
+        raise RuntimeError("ONEC_USER and ONEC_PASSWORD are not set, put them in env or .env")
+    return login, secret
