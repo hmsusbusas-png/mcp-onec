@@ -92,7 +92,7 @@ def metadata():
 def count(path, query):
     url = f"{odata_root}/{path}/$count"
     tail = "?" + encode_query(query) if query else ""
-    return int(checked(gate().get(url + tail), url).text.lstrip("﻿").strip())
+    return int(checked(gate().get(url + tail), url).text.lstrip("\N{ZERO WIDTH NO-BREAK SPACE}").strip())
 
 
 def rows(path, query, offset, limit):
